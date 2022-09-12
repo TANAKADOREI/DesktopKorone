@@ -1,10 +1,15 @@
-﻿using Newtonsoft.Json;
+﻿using DesktopKorone.Ref;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -15,184 +20,182 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using WpfAnimatedGif;
+
+using Image = System.Drawing.Image;
+using Rectangle = System.Drawing.Rectangle;
 
 namespace DesktopKorone
 {
-
-	class Config
-	{
-		public class Motion
-		{
-			public Motion(string kibun_name, params Koudou[] koudou)
-			{
-
-			}
-		}
-
-		public class Koudou
-		{
-			//custom dll example : "<dll file name>:full class name(<namespace1>.<namespace2>.Foo)"
-			//BaseMotion.dll:MyNamespace.MainClass
-			public Koudou(string koudou_name, string dll)
-			{
-
-			}
-			public Koudou(string koudou_name, Func<>)
-		}
-
-		[JsonIgnore]
-		public readonly static Koudou[] KIBAN_KOUDOU = new Koudou[]
-		{
-			new Koudou("OAYO"),
-			new Koudou("OTSUKORON"),
-			new Koudou("TWEET"),
-			new Koudou("YOUTUBE"),
-			new Koudou("MOVE"),
-			new Koudou("STAND"),
-			new Koudou("CATCH"),
-		};
-
-        [JsonProperty("Motions")]
-		public Motion[] m_motions = new Motion[]
-		{
-			new Motion("FUTSU",KIBAN_KOUDOU),
-			new Motion("HAPPY",KIBAN_KOUDOU),
-			new Motion("ANGRY",KIBAN_KOUDOU),
-			new Motion("BORING",KIBAN_KOUDOU),
-			new Motion("SAD",KIBAN_KOUDOU),
-			new Motion("ASEELPY",KIBAN_KOUDOU),
-		};
-	}
-
-	abstract class RenderClass
-	{
-		public abstract void Rendering(System.Windows.Controls.Image image_view);
-	}
-
-	class GIF_RenderClass : RenderClass
-	{
-		public GIF_RenderClass(string gif_file_path)
-		{
-
-		}
-
-		public override void Rendering(System.Windows.Controls.Image image_view)
-		{
-			throw new NotImplementedException();
-		}
-	}
-
-	class PNG_RenderClass : RenderClass
-	{
-		public PNG_RenderClass(string mokuhyou_dir_path)
-		{
-
-		}
-
-		public override void Rendering(System.Windows.Controls.Image image_view)
-		{
-			throw new NotImplementedException();
-		}
-	}
-
 	public partial class MainWindow : Window
 	{
-		public const string PATH_ROOT = "KoroneSouko";
-		private Dictionary<KoroneKibun, Dictionary<KoroneMokuhyou, RenderClass>> m_image_sets;
+		const string DIR_PLUGINS = "PLUGINS";
+		const string DIR_RESOURCES = "RESOURCES";
+		const string DIR_RESOURCES_ANIMATION_CONTROLLER = "RESOURCES_ANIMATION_CONTROLLER";
+		const string PLUGIN_ROOT_CLASS = "KoroneDesktopPlugin";
+		const string PLUGIN_BASE_FILE = "KoroneDesktopPlugin";
 
 		public MainWindow()
 		{
 			InitializeComponent();
-			Init();
+			Startup();
 		}
 
-		static string GetAnimID(KoroneKibun kibun, KoroneMokuhyou mokuhyou)
+		void CheckBaseDirs(string name)
 		{
-			return GetAnimID(Enum.GetName(typeof(KoroneKibun), kibun), Enum.GetName(typeof(KoroneMokuhyou), mokuhyou));
+			if (!Directory.Exists(name)) Directory.CreateDirectory(name);
 		}
 
-		static string GetAnimID(string kibun, string mokuhyou)
+		void Startup()
 		{
-			return $"{kibun}/{mokuhyou}";
+			CheckBaseDirs(DIR_PLUGINS);
+			CheckBaseDirs(DIR_RESOURCES);
+			CheckBaseDirs(DIR_RESOURCES_ANIMATION_CONTROLLER);
+			LoadPlugins();
+			LoadResources();
 		}
 
-		private void Init()
+		void LoadPlugins()
 		{
-			//dirs
+			List<Task> tasks = new List<Task>();
+
+			m_plugins.Clear();
+			foreach (var plugin in Directory.EnumerateFiles(DIR_PLUGINS, "*.dll").Append(PLUGIN_BASE_FILE))
 			{
-				string char_root_dir = $"{PATH_ROOT}/Char";
-				CheckDir(char_root_dir);
-				foreach (var _fuku in Directory.GetDirectories(char_root_dir).Append("Base"))
+				tasks.Add(Task.Run(() =>
 				{
-					string fuku = System.IO.Path.GetFileName(_fuku);
+					var asm = Assembly.LoadFile(plugin);
+					var ins = asm.CreateInstance(PLUGIN_ROOT_CLASS) as KoroneDesktopPluginClass;
 
-					foreach (var kibun in Enum.GetNames(typeof(KoroneKibun)))
+					if (ins == null)
 					{
-						foreach (var mokuhyou in Enum.GetNames(typeof(KoroneMokuhyou)))
-						{
-							string anim_id = GetAnimID(kibun, mokuhyou);
-							string path = $"{char_root_dir}/{fuku}/{anim_id}";
-							CheckDir(path);
-
-							foreach (var _random_preset in Directory.GetDirectories(path).Append("Base"))
-							{
-								string random_preset = System.IO.Path.GetFileName(_random_preset);
-								path = $"{PATH_ROOT}/Char/{fuku}/{anim_id}/{random_preset}";
-								CheckDir(path);
-
-								var files = Directory.GetFiles(path);
-
-								if (files.Length == 0)
-								{
-									//image x
-									if (Enum.GetName(typeof(KoroneKibun), KoroneKibun.FUTSU_DOG) == kibun)
-									{
-										//必要Images set
-										YesByeBye($"Please fill in all images in the " +
-											$"{Enum.GetName(typeof(KoroneKibun), KoroneKibun.FUTSU_DOG)} image set");
-									}
-								}
-								else if (files.Length == 1)
-								{
-									//gif file
-									GIF_RenderClass render = new GIF_RenderClass(files[0]);
-									var dict_mokuhyou = new Dictionary<KoroneMokuhyou, RenderClass>();
-									dict_mokuhyou.Add((KoroneMokuhyou)Enum.Parse(typeof(KoroneMokuhyou), mokuhyou), render);
-									m_image_sets.Add((KoroneKibun)Enum.Parse(typeof(KoroneKibun), kibun), dict_mokuhyou);
-								}
-								else
-								{
-									//png files
-								}
-							}
-						}
+						MessageBox.Show($"{plugin}, error");
 					}
-				}
+
+					lock (m_lock)
+					{
+						m_plugins.Add(ins.Name, ins);
+					}
+				}));
 			}
+
+			Task.WaitAll(tasks.ToArray());
 		}
 
-		void YesByeBye(string reason)
+		void LoadResources()
 		{
-			MessageBox.Show(reason);
-			Environment.Exit(1);
-		}
-
-		void Render()
-		{
-			var image = new BitmapImage();
-			image.BeginInit();
-			image.UriSource = new Uri("");
-			image.EndInit();
-			ImageBehavior.SetAnimatedSource(IMAGEVIEW_CHAR, image);
-		}
-
-		private static void CheckDir(string dir)
-		{
-			if (!Directory.Exists(dir))
+			List<Task> tasks = new List<Task>();
+			m_animations.Clear();
+			foreach (var animation_file in Directory.EnumerateFiles(DIR_RESOURCES_ANIMATION_CONTROLLER))
 			{
-				Directory.CreateDirectory(dir);
+				tasks.Add(Task.Run(() =>
+				{
+					var animation = JsonConvert.DeserializeObject<KoroneAnimation>(File.ReadAllText(animation_file));
+
+					if (animation == null || !animation.LoadAndCheck())
+					{
+						MessageBox.Show($"{animation_file}, error");
+					}
+
+					lock (m_lock)
+					{
+						m_animations.Add(animation.AnimationName, animation);
+					}
+				}));
+			}
+
+			Task.WaitAll(tasks.ToArray());
+		}
+
+		void StartTimer()
+		{
+			var timer = new DispatcherTimer();
+			timer.Tick += Loop;
+			timer.Start();
+		}
+
+		Tuple<string, KoroneDesktopPluginClass> GetTodo()
+		{
+			if (m_priority_0.Count != 0)
+			{
+				var o = m_priority_0[0];
+				m_priority_0.RemoveAt(0);
+				return o;
+			}
+			else if (m_priority_1.Count != 0)
+			{
+				var o = m_priority_1[0];
+				m_priority_1.RemoveAt(0);
+				return o;
+			}
+			else if (m_priority_2.Count != 0)
+			{
+				var o = m_priority_2[0];
+				m_priority_2.RemoveAt(0);
+				return o;
+			}
+			else if (m_priority_3.Count != 0)
+			{
+				var o = m_priority_3[0];
+				m_priority_3.RemoveAt(0);
+				return o;
+			}
+			else
+			{
+				return null;
 			}
 		}
+
+		void Loop(object sender, EventArgs e)
+		{
+			var timer = sender as DispatcherTimer;
+			timer.Dispatcher.
+		}
+
+		#region MemberVar
+
+		object m_lock = new object();
+		List<Tuple<string, KoroneDesktopPluginClass>> m_priority_0 = new List<Tuple<string, KoroneDesktopPluginClass>>();
+		List<Tuple<string, KoroneDesktopPluginClass>> m_priority_1 = new List<Tuple<string, KoroneDesktopPluginClass>>();
+		List<Tuple<string, KoroneDesktopPluginClass>> m_priority_2 = new List<Tuple<string, KoroneDesktopPluginClass>>();
+		List<Tuple<string, KoroneDesktopPluginClass>> m_priority_3 = new List<Tuple<string, KoroneDesktopPluginClass>>();
+		Dictionary<string, KoroneAnimation> m_animations = new Dictionary<string, KoroneAnimation>();
+		Dictionary<string, KoroneDesktopPluginClass> m_plugins = new Dictionary<string, KoroneDesktopPluginClass>();
+
+		#endregion
+
+		#region Callable
+
+		public void CALL_AnimationStart(string animation_name, bool force = false)
+		{
+
+		}
+
+		public void CALL_AddTodoList(EisenhowerMatrixFlags flags, string animation_name, KoroneDesktopPluginClass plugin)
+		{
+			if (flags.HasFlag(EisenhowerMatrixFlags.URGENT | EisenhowerMatrixFlags.IMPORTANT))
+			{
+				m_priority_0.Add(new Tuple<string, KoroneDesktopPluginClass>(animation_name, plugin));
+			}
+			else if (flags.HasFlag(EisenhowerMatrixFlags.NOT_URGENT | EisenhowerMatrixFlags.IMPORTANT))
+			{
+				m_priority_1.Add(new Tuple<string, KoroneDesktopPluginClass>(animation_name, plugin));
+			}
+			else if (flags.HasFlag(EisenhowerMatrixFlags.URGENT | EisenhowerMatrixFlags.NOT_IMPORTANT))
+			{
+				m_priority_2.Add(new Tuple<string, KoroneDesktopPluginClass>(animation_name, plugin));
+			}
+			else if (flags.HasFlag(EisenhowerMatrixFlags.NOT_URGENT | EisenhowerMatrixFlags.NOT_IMPORTANT))
+			{
+				m_priority_3.Add(new Tuple<string, KoroneDesktopPluginClass>(animation_name, plugin));
+			}
+			else
+			{
+				return;
+			}
+		}
+
+		#endregion
 	}
 }
