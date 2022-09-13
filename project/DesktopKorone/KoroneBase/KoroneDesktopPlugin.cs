@@ -6,18 +6,15 @@ using DesktopKorone;
 using DesktopKorone.Ref;
 
 
+[KoroneDesktopPluginAttr("KoroneDesktopBasePlugin")]
 public class KoroneDesktopPlugin : KoroneDesktopPluginClass
 {
-    public override string Name => "KoroneDesktopBasePlugin";
-
-    public override void OAYO()
+    public override void OAYO(MainWindow window)
     {
-        throw new NotImplementedException();
     }
 
     public override void OTSUKORON()
     {
-        throw new NotImplementedException();
     }
 }
 

@@ -6,6 +6,8 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Text;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media.Imaging;
 
 namespace DesktopKorone.Ref
 {
@@ -19,20 +21,33 @@ namespace DesktopKorone.Ref
 		public const string ASLEEPY = nameof(ASLEEPY);
 	}
 
-	public class KoroneDesktopPluginSupport
+	[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+	public class KoroneDesktopPluginAttr : Attribute
 	{
-		public delegate void OAYO(MainWindow window, KoroneAnimation[] using_animations);
-		public delegate MainWindow OTSUKORON();
-		public delegate void EVENT(KoroneAnimation animation, AnimationState animation_state, string event_code);
+		public string PluginName;
+
+		public KoroneDesktopPluginAttr(string pluginName)
+		{
+			PluginName = pluginName;
+		}
 	}
 
 	public abstract class KoroneDesktopPluginClass
 	{
-		public abstract string Name { get; }
 		public abstract void OAYO(MainWindow window);
 		public abstract void OTSUKORON();
 
-		protected virtual void EVENT(KoroneAnimation animation, AnimationState animation_state, string event_code)
+		public virtual void TODO_EVENT()
+		{
+
+		}
+
+		public virtual void EVENT(KoroneAnimation animation, AnimationState animation_state, string event_code)
+		{
+
+		}
+
+		public virtual void LOOP(ref MainWindow.AnimationInfo info)
 		{
 
 		}
@@ -58,12 +73,16 @@ namespace DesktopKorone.Ref
 		public class Frame
 		{
 			[JsonIgnore]
-			public Image Image;
+			public BitmapSource Image;
+
+			[JsonIgnore]
+			public string ImagePath { get => $"{MainWindow.DIR_RESOURCES}/{imagePath}";}
 
 			public readonly string Notice = "";
 
 			public readonly string Notice_ImagePath = "Image path (png, gif)";
-			public string ImagePath = "";
+			[JsonProperty(nameof(ImagePath))]
+			private string imagePath = "";
 
 			public readonly string Notice_Delay = "the time the image will be displayed";
 			public int Delay = 100;
@@ -74,63 +93,78 @@ namespace DesktopKorone.Ref
 			public readonly string Notice_LoopCount = "How many times to repeat the motion of the frame";
 			public int LoopCount = 0;
 
+
 			[Obsolete]
 			public Frame() { }
 
-			[Obsolete]
-			public Frame(string TEMPLATE)
-			{
-				Notice = TEMPLATE;
-			}
-
 			public Frame(Image image, int delay, string eventCode, int loopCount)
 			{
-				Image = image;
 				Delay = delay;
 				EventCode = eventCode;
 				LoopCount = loopCount;
+
+				if (image != null)
+				{
+					Image = MainWindow.ImageToBitmapSource(image);
+				}
 			}
 		}
 
 		public readonly uint VERSION = 1;
 		public string AnimationName = "";
-		public List<Frame> Frames = new List<Frame>(new Frame[] { new Frame("FrameTemplate") });
+		public Frame[] Frames = new Frame[0];
+		public readonly string Notice_Loop = "Loop <= 0 == 'loop', Loop > 0 == 'repeat'";
+		public int Loop = 0;
 
 		public bool LoadAndCheck()
 		{
 			if (AnimationName == "") return false;
 			if (Frames == null) return false;
-			if (Frames.Count == 0) return false;
-			for (int current_frame_index = 0; current_frame_index < Frames.Count; current_frame_index++)
+			if (Frames.Length == 0) return false;
+			for (int current_frame_index = 0; current_frame_index < Frames.Length; current_frame_index++)
 			{
 				if (Frames[current_frame_index].Delay <= 0) return false;
 				if (Frames[current_frame_index].LoopCount < 0) return false;
 
 				try
 				{
-					Frames[current_frame_index].Image = Image.FromFile(Frames[current_frame_index].ImagePath);
+					var raw_image = Image.FromFile(Frames[current_frame_index].ImagePath);
 
-					if (Frames[current_frame_index].Image.RawFormat.Equals(ImageFormat.Png))
+					if (raw_image.RawFormat.Equals(ImageFormat.Png))
 					{
-						//continue
+						Frames[current_frame_index].Image = MainWindow.ImageToBitmapSource(raw_image);
 					}
-					else if (Frames[current_frame_index].Image.RawFormat.Equals(ImageFormat.Gif) && ImageAnimator.CanAnimate(Frames[current_frame_index].Image))
+					else if (raw_image.RawFormat.Equals(ImageFormat.Gif) && ImageAnimator.CanAnimate(raw_image))
 					{
-						var dimension = new FrameDimension(Frames[current_frame_index].Image.FrameDimensionsList[0]);
-						int gif_frame_count = Frames[current_frame_index].Image.GetFrameCount(dimension);
+						var dimension = new FrameDimension(raw_image.FrameDimensionsList[0]);
+						int gif_frame_count = raw_image.GetFrameCount(dimension);
 						List<Frame> frames = new List<Frame>();
 						int index = 0;
 
 						for (int gif_frame_index = 0; gif_frame_index < gif_frame_count; gif_frame_index++)
 						{
-							Frames[current_frame_index].Image.SelectActiveFrame(dimension, gif_frame_index);
-							var img = Frames[current_frame_index].Image.Clone() as Image;
-							var delay = BitConverter.ToInt32(Frames[current_frame_index].Image.GetPropertyItem(20736).Value, index) * 10;
+							raw_image.SelectActiveFrame(dimension, gif_frame_index);
+							var img = raw_image.Clone() as Image;
+							var delay = BitConverter.ToInt32(raw_image.GetPropertyItem(20736).Value, index) * 10;
 							delay = (delay < 100 ? 100 : delay);
 							index += 4;
 
-							frames.Add(new Frame(img,delay, ((gif_frame_index == 0 || gif_frame_index+1 == gif_frame_count) ? Frames[current_frame_index].EventCode : ""), Frames[current_frame_index].LoopCount));
+							frames.Add(new Frame(img, delay, ((gif_frame_index == 0 || gif_frame_index + 1 == gif_frame_count) ? Frames[current_frame_index].EventCode : ""), Frames[current_frame_index].LoopCount));
 						}
+
+						Array.Resize(ref Frames, Frames.Length + frames.Count - 1);//resize
+						Array.Copy(Frames, current_frame_index + 1,
+							Frames, current_frame_index+ frames.Count - 1,
+							Frames.Length- current_frame_index + 1);//move
+						Array.Copy(frames.ToArray(), 0, Frames, current_frame_index, frames.Count);
+						//F 8 [1][2][3(gif)][4][5][6][7][8]
+						//f 3 [11][12][13]
+						//c 2 cur
+						//[1][2][3(gif)][4][5][6][7][8]
+						//[1][2][3(gif)][4][5][6][7][8][][] <- resized
+						//[1][2][3(gif)][][][4][5][6][7][8] <- moved
+						//[1][2][11][12][13][4][5][6][7][8] <- f copyed
+						//
 					}
 					else
 					{

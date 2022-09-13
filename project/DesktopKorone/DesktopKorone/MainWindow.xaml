@@ -8,11 +8,10 @@
         mc:Ignorable="d"
         WindowStyle="None"
         AllowsTransparency="True"
-        Background="Transparent"
+        Background="White"
         ShowInTaskbar="False"
         Title="Char" Height="128" Width="128">
     <Grid>
-        <Image x:Name="IMAGEVIEW_CHAR"
-               gif:ImageBehavior.RepeatBehavior="Forever"/>
+        <Image x:Name="IMAGEVIEW_CHAR"/>
     </Grid>
 </Window>
