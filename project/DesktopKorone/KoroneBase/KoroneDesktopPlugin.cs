@@ -15,7 +15,7 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
 {
     #region utils
 
-    static float Clamp(float o)
+    static float Clamp01(float o)
     {
         return 0 <= o ? 1 >= o ? o : 1 : 0;
     }
@@ -28,6 +28,16 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
     static Point Lerp(Point a, Point b, float t)
     {
         return new Point(Lerp(a.X, b.X, t), Lerp(a.Y, b.Y, t));
+    }
+
+    static float Abs(float f)
+    {
+        return (f < 0) ? -f : f;
+    }
+
+    static float Distance(Point a,Point b)
+    {
+        return Abs((float)Math.Sqrt(Math.Pow(b.X - a.X, 2) + Math.Pow(b.Y - a.Y,2)));
     }
 
     #endregion
@@ -45,7 +55,7 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
 
     public override void TODO_EVENT()
     {
-        switch (m_window.Random.Next(0, 4))
+        switch (m_window.Random.Next(0, 2))
         {
             case 1:
                 m_window.CALL_AddTodoList(EisenhowerMatrix.NOT_URGENT__NOT_IMPORTANT,
@@ -57,7 +67,7 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
     class Anim_FreeWalk : IAnimationBehavior
     {
         ScaleTransform flipTrans;
-        const float SPEED = 0.1f;
+        const float SPEED = 30f;
         Point m_goal_point;
         Point m_start_point;
         float m_time;
@@ -93,7 +103,11 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
                     info.ImageView.RenderTransform = flipTrans;
                 }
 
-                m_time += SPEED * (float)info.DeltaTime.TotalSeconds;
+                var distance = Distance(m_start_point, m_goal_point);
+                var total_time = distance / SPEED;
+                var speed = (float)info.DeltaTime.TotalSeconds/ total_time;
+
+                m_time += speed;
 
                 if (m_time > 1f)
                 {

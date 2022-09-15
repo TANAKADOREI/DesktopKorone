@@ -284,7 +284,7 @@ namespace DesktopKorone
 			{
 				var sleep = m_config.FPS_sleep_ms;
 
-				var todo = GetTodo();
+				var todo = GetTodo(true);
 				AnimationInfo info = new AnimationInfo(IMAGEVIEW_CHAR);
 
 				info.Clear();
@@ -293,9 +293,9 @@ namespace DesktopKorone
 				long todo_find_time_old = DateTime.UtcNow.Ticks;
 				int next_behavior_delay = 0;
 
-				var NewTodo = new Action(() =>
+				var NewTodo = new Action<bool>((bool get_idle) =>
 				{
-					todo = GetTodo();
+					todo = GetTodo(get_idle);
 
 					if (info.Animation != null && info.Animation.AnimationName == ANIMATION_IDLE && todo.AnimationName == info.Animation.AnimationName)
 					{
@@ -319,7 +319,7 @@ namespace DesktopKorone
 					});
 				});
 
-				NewTodo();
+				NewTodo(true);
 
 				while (!m_loop_thread_token.IsCancellationRequested)
 				{
@@ -347,7 +347,7 @@ namespace DesktopKorone
 								p.TODO_EVENT();
 							}
 
-							NewTodo();
+							NewTodo(false);
 							todo_find_time_old = DateTime.UtcNow.Ticks;
 						}
 					}
@@ -373,6 +373,8 @@ namespace DesktopKorone
 									//animation end
 									if (info.Behavior != null) info.Behavior.End(info, this);
 									info.Clear();
+									next_behavior_delay = 0;
+									NewTodo(true);
 									goto done;
 								}
 								info.CurrentFrameIndex = 0;
@@ -404,8 +406,21 @@ namespace DesktopKorone
 		}
 
 		//<anim name> <plugin class>
-		Todo GetTodo()
+		Todo GetTodo(bool get_idle)
 		{
+			var GetIdle = new Func<Todo>(() =>
+			{
+				var idle = new Todo(null, m_plugins[PLUGIN_BASE_NAME], ANIMATION_IDLE);
+				idle.Priority = (int)EisenhowerMatrix.NOT_URGENT__NOT_IMPORTANT;
+				idle.Priority--;
+				return idle;
+			});
+
+			if (get_idle)
+			{
+				return GetIdle();
+			}
+
 			if (m_priority_0.Count != 0)
 			{
 				var o = m_priority_0[0];
@@ -432,10 +447,7 @@ namespace DesktopKorone
 			}
 			else
 			{
-				var idle = new Todo(null, m_plugins[PLUGIN_BASE_NAME], ANIMATION_IDLE);
-				idle.Priority = (int)EisenhowerMatrix.NOT_URGENT__NOT_IMPORTANT;
-				idle.Priority--;
-				return idle;
+				return GetIdle();
 			}
 		}
 
