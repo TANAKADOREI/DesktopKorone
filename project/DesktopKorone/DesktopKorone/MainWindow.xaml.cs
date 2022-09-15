@@ -224,13 +224,20 @@ namespace DesktopKorone
 			}
 		}
 
+		public class Request
+		{
+			public bool ForceFindNewTodo = false;
+		}
+
 		public class AnimationInfo
 		{
 			public KoroneAnimation Animation;
-			public KoroneDesktopPluginClass Plugin;
+			public KoroneDesktopPluginClass Plugin=>CurrentTodo.Plugin;
+			public IAnimationBehavior Behavior=>CurrentTodo?.Behavior;
 			public int CurrentFrameIndex;
 			public System.Windows.Controls.Image ImageView;
 			public TimeSpan DeltaTime;
+			public Todo CurrentTodo;
 
 			#region Not restored to default on next frame
 			public bool TOGGLE_PauseAnimation = false;
@@ -239,6 +246,20 @@ namespace DesktopKorone
 			#region Restored to default on next frame
 			public bool BUTTON_ForceAnimationEnd = false;
 			#endregion
+
+			public void Clear()
+			{
+				Animation = null;
+				CurrentTodo = null;
+				CurrentFrameIndex = 0;
+				TOGGLE_PauseAnimation = false;
+				BUTTON_ForceAnimationEnd = false;
+			}
+
+			public AnimationInfo(System.Windows.Controls.Image image_view)
+			{
+				ImageView = image_view;
+			}
 		}
 
 		public class Todo
@@ -246,6 +267,7 @@ namespace DesktopKorone
 			public IAnimationBehavior Behavior;
 			public KoroneDesktopPluginClass Plugin;
 			public string AnimationName;
+			public int Priority;
 
 			public Todo(IAnimationBehavior behavior, KoroneDesktopPluginClass plugin, string animationName)
 			{
@@ -263,28 +285,29 @@ namespace DesktopKorone
 				var sleep = m_config.FPS_sleep_ms;
 
 				var todo = GetTodo();
-				AnimationInfo info = new AnimationInfo()
-				{
-					CurrentFrameIndex = 0,
-					Animation = m_animations[todo.AnimationName],
-					Plugin = todo.Plugin,
-					ImageView = IMAGEVIEW_CHAR
-				};
+				AnimationInfo info = new AnimationInfo(IMAGEVIEW_CHAR);
 
+				info.Clear();
 				long old_time = DateTime.UtcNow.Ticks;
 				long anim_frame_old_time = DateTime.UtcNow.Ticks;
 				long todo_find_time_old = DateTime.UtcNow.Ticks;
-				bool animation_running = true;
 				int next_behavior_delay = 0;
-				IAnimationBehavior behavior = null;
 
 				var NewTodo = new Action(() =>
 				{
 					todo = GetTodo();
-					info.CurrentFrameIndex = 0;
-					info.Animation = m_animations[todo.AnimationName];
-					info.Plugin = todo.Plugin;
-					behavior = todo.Behavior;
+
+					if (info.Animation != null && info.Animation.AnimationName == ANIMATION_IDLE && todo.AnimationName == info.Animation.AnimationName)
+					{
+						return;
+					}
+
+					if ((info.CurrentTodo != null && todo.Priority > info.CurrentTodo.Priority) || info.CurrentTodo == null)
+					{
+						info.CurrentTodo = todo;
+						info.CurrentFrameIndex = 0;
+						info.Animation = m_animations[todo.AnimationName];
+					}
 				});
 
 				var RenderImage = new Action(() =>
@@ -292,50 +315,53 @@ namespace DesktopKorone
 					Dispatcher.Invoke(() =>
 					{
 						IMAGEVIEW_CHAR.Source = info.Animation.Frames[info.CurrentFrameIndex].Image;
-						behavior?.AnimtaionFrameUpdated(info,this);
+						if (info.Behavior != null) info.Behavior.AnimtaionFrameUpdated(info, this);
 					});
 				});
 
 				NewTodo();
-				RenderImage();
 
 				while (!m_loop_thread_token.IsCancellationRequested)
 				{
 					info.DeltaTime = TimeSpan.FromTicks(DateTime.UtcNow.Ticks - old_time);
 					old_time = DateTime.UtcNow.Ticks;
 
-					behavior?.WindowFrameUpdated(info, this);
+					if(info.Behavior != null) info.Behavior.WindowFrameUpdated(info, this);
+					var req = WindowFrameUpdate?.Invoke();
 
-					if (!animation_running || info.Animation.AnimationName == ANIMATION_IDLE)
+					//todo proc
+					//항상 할일을 찾아야함
+					//현재 진행중인 애니메이션 우선순위보다 높다면
+					//현재 행동을 포기하고
+					//높은 우선순위 할일을 함
 					{
 						if (next_behavior_delay <= 0)
 						{
 							next_behavior_delay = Random.Next(m_config.BehaviorRandomDelay_Min_MS, m_config.BehaviorRandomDelay_Max_MS);
 						}
 
-						if (TimeSpan.FromTicks(DateTime.UtcNow.Ticks - todo_find_time_old).TotalMilliseconds > next_behavior_delay)
+						if ((req!=null && req.ForceFindNewTodo) || (TimeSpan.FromTicks(DateTime.UtcNow.Ticks - todo_find_time_old).TotalMilliseconds > next_behavior_delay))
 						{
 							foreach (var p in m_plugins.Values)
 							{
 								p.TODO_EVENT();
 							}
-							NewTodo();
-							animation_running = true;
-							todo_find_time_old = DateTime.UtcNow.Ticks;
 
-							goto done;
+							NewTodo();
+							todo_find_time_old = DateTime.UtcNow.Ticks;
 						}
 					}
 
-					if (animation_running || info.Animation.AnimationName == ANIMATION_IDLE)
+					//animation proc
+					if (info.Animation != null)
 					{
 						if ((!info.TOGGLE_PauseAnimation && TimeSpan.FromTicks(DateTime.UtcNow.Ticks - anim_frame_old_time).TotalMilliseconds > info.Animation.Frames[info.CurrentFrameIndex].Delay) || info.BUTTON_ForceAnimationEnd)
 						{
 							anim_frame_old_time = DateTime.UtcNow.Ticks;
 
-							if(info.CurrentFrameIndex == 0)
+							if (info.CurrentFrameIndex == 0)
 							{
-								behavior?.Start(info,this);
+								if (info.Behavior != null) info.Behavior.Start(info, this);
 							}
 
 							RenderImage();
@@ -345,22 +371,16 @@ namespace DesktopKorone
 								if (info.BUTTON_ForceAnimationEnd)
 								{
 									//animation end
-									next_behavior_delay = 0;
-									animation_running = false;
-									info.BUTTON_ForceAnimationEnd = false;
-									behavior?.End(info,this);
+									if (info.Behavior != null) info.Behavior.End(info, this);
+									info.Clear();
 									goto done;
-								}
-								else
-								{
-									//loop
 								}
 								info.CurrentFrameIndex = 0;
 							}
 							else
 							{
 								info.CurrentFrameIndex++;
-							}							
+							}
 						}
 					}
 
@@ -412,16 +432,20 @@ namespace DesktopKorone
 			}
 			else
 			{
-				return new Todo(null, m_plugins[PLUGIN_BASE_NAME], ANIMATION_IDLE);
+				var idle = new Todo(null, m_plugins[PLUGIN_BASE_NAME], ANIMATION_IDLE);
+				idle.Priority = (int)EisenhowerMatrix.NOT_URGENT__NOT_IMPORTANT;
+				idle.Priority--;
+				return idle;
 			}
 		}
 
 		#region MemberVar
 
 		public readonly Random Random = new Random();
-		public int ScreenWidth=> (int)System.Windows.SystemParameters.PrimaryScreenWidth;
-		public int ScreenHeight=> (int)System.Windows.SystemParameters.PrimaryScreenHeight;
+		public int ScreenWidth => (int)System.Windows.SystemParameters.PrimaryScreenWidth;
+		public int ScreenHeight => (int)System.Windows.SystemParameters.PrimaryScreenHeight;
 		public System.Drawing.Point Position => new System.Drawing.Point((int)Left, (int)Top);
+		public event Func<Request> WindowFrameUpdate;
 
 		object m_lock = new object();
 
@@ -439,28 +463,32 @@ namespace DesktopKorone
 
 		#region Callable
 
-		public void CALL_AddTodoList(EisenhowerMatrixFlags flags, Todo todo)
+		public bool CALL_AddTodoList(EisenhowerMatrix priority, Todo todo)
 		{
-			if (flags.HasFlag(EisenhowerMatrixFlags.URGENT | EisenhowerMatrixFlags.IMPORTANT))
+			int priority_int = (int)priority;
+			todo.Priority = priority_int;
+			if (priority_int == 0)
 			{
 				m_priority_0.Add(todo);
 			}
-			else if (flags.HasFlag(EisenhowerMatrixFlags.NOT_URGENT | EisenhowerMatrixFlags.IMPORTANT))
+			else if (priority_int == 1)
 			{
 				m_priority_1.Add(todo);
 			}
-			else if (flags.HasFlag(EisenhowerMatrixFlags.URGENT | EisenhowerMatrixFlags.NOT_IMPORTANT))
+			else if (priority_int == 2)
 			{
 				m_priority_2.Add(todo);
 			}
-			else if (flags.HasFlag(EisenhowerMatrixFlags.NOT_URGENT | EisenhowerMatrixFlags.NOT_IMPORTANT))
+			else if (priority_int == 3)
 			{
 				m_priority_3.Add(todo);
 			}
 			else
 			{
-				return;
+				return false;
 			}
+
+			return true;
 		}
 
 		#endregion

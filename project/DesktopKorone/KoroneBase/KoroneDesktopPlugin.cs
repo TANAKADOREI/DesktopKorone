@@ -48,7 +48,7 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
         switch (m_window.Random.Next(0, 4))
         {
             case 1:
-                m_window.CALL_AddTodoList(EisenhowerMatrixFlags.NOT_URGENT | EisenhowerMatrixFlags.NOT_IMPORTANT,
+                m_window.CALL_AddTodoList(EisenhowerMatrix.NOT_URGENT__NOT_IMPORTANT,
                     new MainWindow.Todo(new Anim_FreeWalk(), this, "@WALK"));
                 break;
         }

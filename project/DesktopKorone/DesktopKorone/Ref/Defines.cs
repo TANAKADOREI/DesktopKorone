@@ -37,15 +37,12 @@ namespace DesktopKorone.Ref
 		public abstract void OAYO(MainWindow window);
 		public abstract void OTSUKORON();
 
-		public virtual void TODO_EVENT()
-		{
-
-		}
+		public virtual void TODO_EVENT() { }
 	}
 
 	public interface IAnimationBehavior
 	{
-		void Start(MainWindow.AnimationInfo info,MainWindow window);
+		void Start(MainWindow.AnimationInfo info, MainWindow window);
 		void WindowFrameUpdated(MainWindow.AnimationInfo info, MainWindow window);
 		void AnimtaionFrameUpdated(MainWindow.AnimationInfo info, MainWindow window);
 		void End(MainWindow.AnimationInfo info, MainWindow window);
@@ -58,12 +55,12 @@ namespace DesktopKorone.Ref
 		END
 	}
 
-	public enum EisenhowerMatrixFlags
+	public enum EisenhowerMatrix
 	{
-		URGENT,
-		IMPORTANT,
-		NOT_URGENT,
-		NOT_IMPORTANT
+		NOT_URGENT__NOT_IMPORTANT = 0,
+		URGENT__NOT_IMPORTANT,
+		NOT_URGENT__IMPORTANT,
+		URGENT__IMPORTANT,
 	}
 
 	public class KoroneAnimation
@@ -74,7 +71,7 @@ namespace DesktopKorone.Ref
 			public BitmapSource Image;
 
 			[JsonIgnore]
-			public string ImagePath { get => $"{MainWindow.DIR_RESOURCES}/{imagePath}";}
+			public string ImagePath { get => $"{MainWindow.DIR_RESOURCES}/{imagePath}"; }
 
 			public readonly string Notice = "";
 
@@ -152,8 +149,8 @@ namespace DesktopKorone.Ref
 
 						Array.Resize(ref Frames, Frames.Length + frames.Count - 1);//resize
 						Array.Copy(Frames, current_frame_index + 1,
-							Frames, current_frame_index+ frames.Count - 1,
-							Frames.Length- current_frame_index + 1);//move
+							Frames, current_frame_index + frames.Count - 1,
+							Frames.Length - current_frame_index + 1);//move
 						Array.Copy(frames.ToArray(), 0, Frames, current_frame_index, frames.Count);
 						//F 8 [1][2][3(gif)][4][5][6][7][8]
 						//f 3 [11][12][13]

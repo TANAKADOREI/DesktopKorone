@@ -11,7 +11,7 @@
         Background="Transparent"
         ShowInTaskbar="False"
 		Topmost="True"
-        Title="Char" Height="128" Width="128">
+        Title="Char" Height="64" Width="64">
     <Grid>
 		<Image x:Name="IMAGEVIEW_CHAR" RenderTransformOrigin="0.5,0.5"/>
     </Grid>
