@@ -41,16 +41,14 @@ namespace DesktopKorone.Ref
 		{
 
 		}
+	}
 
-		public virtual void EVENT(KoroneAnimation animation, AnimationState animation_state, string event_code)
-		{
-
-		}
-
-		public virtual void LOOP(ref MainWindow.AnimationInfo info)
-		{
-
-		}
+	public interface IAnimationBehavior
+	{
+		void Start(MainWindow.AnimationInfo info,MainWindow window);
+		void WindowFrameUpdated(MainWindow.AnimationInfo info, MainWindow window);
+		void AnimtaionFrameUpdated(MainWindow.AnimationInfo info, MainWindow window);
+		void End(MainWindow.AnimationInfo info, MainWindow window);
 	}
 
 	public enum AnimationState

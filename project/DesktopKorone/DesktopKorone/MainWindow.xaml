@@ -8,10 +8,11 @@
         mc:Ignorable="d"
         WindowStyle="None"
         AllowsTransparency="True"
-        Background="White"
+        Background="Transparent"
         ShowInTaskbar="False"
+		Topmost="True"
         Title="Char" Height="128" Width="128">
     <Grid>
-        <Image x:Name="IMAGEVIEW_CHAR"/>
+		<Image x:Name="IMAGEVIEW_CHAR" RenderTransformOrigin="0.5,0.5"/>
     </Grid>
 </Window>
