@@ -1,111 +1,496 @@
-﻿using System;
+﻿using DesktopKorone.Ref;
+using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography.Xml;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using System.Windows.Threading;
+
+using Image = System.Drawing.Image;
+using Path = System.IO.Path;
+using Rectangle = System.Drawing.Rectangle;
 
 namespace DesktopKorone
 {
+	public partial class MainWindow : Window
+	{
+		[DllImport("gdi32.dll", EntryPoint = nameof(DeleteObject))]
+		[return: MarshalAs(UnmanagedType.Bool)]
+		public static extern bool DeleteObject([In] IntPtr hObject);
 
-    enum KoroneKibun
-    {
-        FUTSU_DOG = 0,
-        HAPPY_DOG,
-        ANGRY_DOG,
-        BORING_DOG,
-        SAD_DOG,
-        SLEEPY_DOG,
-    }
+		public const string DIR_PLUGINS = "PLUGINS";
+		public const string DIR_RESOURCES = "RESOURCES";
+		public const string DIR_RESOURCES_ANIMATION_CONTROLLER = "RESOURCES_ANIMATION_CONTROLLER";
+		const string FILE_CONFIG = "Config.json";
+		const string PLUGIN_BASE_FILE = "KoroneDesktopBasePlugin.dll";
+		const string PLUGIN_BASE_NAME = "KoroneDesktopBasePlugin";
+		const string FILE_ANIMATION_TEMPLATE = "template";
+		const string ANIMATION_IDLE = "@IDLE";
 
-    enum KoroneMokuhyou
-    {
-        OAYO,
-        OTSUKORON,
-        OSHIRASE_TWEET,
-        OSHIRASE_YOUTUBE,
-        MOVING_DOG,
-        STANDING_DOG,
-        CAUGHT_DOG,
-    }
+		class Config
+		{
+			public int BehaviorRandomDelay_Min_MS = 1000;
+			public int BehaviorRandomDelay_Max_MS = 3000;
+			public int FPS = 60;
 
-    class KoroneFrame
-    {
-        public Bitmap Frame;
-        public int Duration;
-    }
+			[JsonIgnore]
+			public int FPS_sleep_ms => 1000 / FPS;
+		}
 
-    public partial class MainWindow : Window
-    {
-        public const string PATH_ROOT = "KoroneSouko";
+		public MainWindow()
+		{
+			InitializeComponent();
+			Startup();
+		}
 
-        public MainWindow()
-        {
-            InitializeComponent();
-            Init();
-        }
+		public static void Exit(string msg)
+		{
+			MessageBox.Show(msg);
+			Environment.Exit(0);
+		}
 
-        static string GetAnimID(KoroneKibun kibun, KoroneMokuhyou mokuhyou)
-        {
-            return GetAnimID(Enum.GetName(typeof(KoroneKibun), kibun), Enum.GetName(typeof(KoroneMokuhyou), mokuhyou));
-        }
+		public static BitmapSource ImageToBitmapSource(Image image)
+		{
+			Bitmap bitmap = image as Bitmap;
+			var handle = bitmap.GetHbitmap();
+			try
+			{
+				return Imaging.CreateBitmapSourceFromHBitmap(bitmap.GetHbitmap(), IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+			}
+			finally
+			{
+				DeleteObject(handle);
+			}
+		}
 
-        static string GetAnimID(string kibun, string mokuhyou)
-        {
-            return $"{kibun}/{mokuhyou}";
-        }
+		void CheckBaseDirs(string name)
+		{
+			if (!Directory.Exists(name)) Directory.CreateDirectory(name);
+		}
 
-        private void Init()
-        {
-            //dirs
-            {
-                string char_root_dir = $"{PATH_ROOT}/Char";
-                CheckDir(char_root_dir);
-                foreach (var _fuku in Directory.GetDirectories(char_root_dir).Append("Base"))
-                {
-                    string fuku = System.IO.Path.GetFileName(_fuku);
+		void Startup()
+		{
+			CheckBaseDirs(DIR_PLUGINS);
+			CheckBaseDirs(DIR_RESOURCES);
+			CheckBaseDirs(DIR_RESOURCES_ANIMATION_CONTROLLER);
+			LoadConfig();
+			LoadPlugins();
+			LoadResources();
+			StartThread();
+		}
 
-                    foreach (var kibun in Enum.GetNames(typeof(KoroneKibun)))
-                    {
-                        foreach (var mokuhyou in Enum.GetNames(typeof(KoroneMokuhyou)))
-                        {
-                            string anim_id = GetAnimID(kibun, mokuhyou);
-                            string path = $"{char_root_dir}/{fuku}/{anim_id}";
-                            CheckDir(path);
+		void LoadConfig()
+		{
+			if (File.Exists(FILE_CONFIG))
+			{
+				m_config = JsonConvert.DeserializeObject<Config>(File.ReadAllText(FILE_CONFIG));
+			}
+			else
+			{
+				m_config = new Config();
+				File.WriteAllText(FILE_CONFIG, JsonConvert.SerializeObject(m_config, Formatting.Indented));
+			}
+		}
 
-                            foreach(var _random_preset in Directory.GetDirectories(path).Append("Base"))
-                            {
-                                string random_preset = System.IO.Path.GetFileName(_random_preset);
-                                path = $"{PATH_ROOT}/Char/{fuku}/{anim_id}/{random_preset}";
-                                CheckDir(path);
+		void LoadPlugins()
+		{
+			List<Task> tasks = new List<Task>();
 
-                                foreach (var frame in Directory.GetFiles(path))
-                                {
+			m_plugins.Clear();
+			foreach (var plugin in Directory.EnumerateFiles(DIR_PLUGINS, "*.dll").Append(PLUGIN_BASE_FILE))
+			{
+				tasks.Add(Task.Run(() =>
+				{
+					var asm = Assembly.LoadFile(Path.GetFullPath(plugin));
+					foreach (var type in from t in asm.GetTypes() where Attribute.IsDefined(t, typeof(KoroneDesktopPluginAttr)) select t)
+					{
+						var attr = type.GetCustomAttribute(typeof(KoroneDesktopPluginAttr)) as KoroneDesktopPluginAttr;
+						string plugin_name = attr.PluginName;
+						KoroneDesktopPluginClass plugin_class = Activator.CreateInstance(type) as KoroneDesktopPluginClass;
 
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+						if (plugin_class == null)
+						{
+							Exit($"plugin_class : {plugin_class}, error");
+						}
 
-        private static void CheckDir(string dir)
-        {
-            if (!Directory.Exists(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-        }
-    }
+						if (plugin_name == null || plugin_name == "")
+						{
+							Exit($"plugin_name : {plugin_name}, error");
+						}
+
+						lock (m_lock)
+						{
+							m_plugins.Add(plugin_name, plugin_class);
+						}
+					}
+				}));
+			}
+
+			Task.WaitAll(tasks.ToArray());
+
+			foreach (var p in m_plugins.Values)
+			{
+				p.OAYO(this);
+			}
+		}
+
+		void LoadResources()
+		{
+			List<Task> tasks = new List<Task>();
+			m_animations.Clear();
+
+			//create template file
+			string template_animation_file_name = $"{DIR_RESOURCES_ANIMATION_CONTROLLER}/{FILE_ANIMATION_TEMPLATE}.json";
+			if (true || !File.Exists(template_animation_file_name))
+			{
+				File.WriteAllText(template_animation_file_name, JsonConvert.SerializeObject(new KoroneAnimation()
+				{
+					AnimationName = "MyAnimationName",
+					Frames = new KoroneAnimation.Frame[]
+					{
+					new KoroneAnimation.Frame(null,563,"event code",123)
+					}
+				}, Formatting.Indented));
+			}
+
+			//create idle anim file
+			string idle_animation_file_name = $"{DIR_RESOURCES_ANIMATION_CONTROLLER}/{ANIMATION_IDLE}.json";
+			if (!File.Exists(idle_animation_file_name))
+			{
+				File.WriteAllText(idle_animation_file_name, JsonConvert.SerializeObject(new KoroneAnimation()
+				{
+					AnimationName = ANIMATION_IDLE,
+				}, Formatting.Indented));
+			}
+
+			foreach (var animation_file in Directory.EnumerateFiles(DIR_RESOURCES_ANIMATION_CONTROLLER))
+			{
+				if (Path.GetFileName(animation_file).ToLower().Contains(FILE_ANIMATION_TEMPLATE)) continue;
+
+				var animation = JsonConvert.DeserializeObject<KoroneAnimation>(File.ReadAllText(animation_file));
+
+				#region tmp
+
+				if (animation == null || !animation.LoadAndCheck())
+				{
+					Exit($"{animation_file}, error");
+				}
+
+				m_animations.Add(animation.AnimationName, animation);
+				#endregion
+
+				#region why?
+				//tasks.Add(Task.Run(() =>
+				//{
+				//	var animation = JsonConvert.DeserializeObject<KoroneAnimation>(File.ReadAllText(animation_file));
+				//
+				//	if (animation == null || !animation.LoadAndCheck())
+				//	{
+				//		Exit($"{animation_file}, error");
+				//	}
+				//
+				//	lock (m_lock)
+				//	{
+				//		m_animations.Add(animation.AnimationName, animation);
+				//	}
+				//}));
+				#endregion
+			}
+
+			//Task.WaitAll(tasks.ToArray());
+
+			if (m_animations.Count == 0)
+			{
+				Exit("null animation");
+			}
+		}
+
+		public class Request
+		{
+			public bool ForceFindNewTodo = false;
+		}
+
+		public class AnimationInfo
+		{
+			public KoroneAnimation Animation;
+			public KoroneDesktopPluginClass Plugin=>CurrentTodo.Plugin;
+			public IAnimationBehavior Behavior=>CurrentTodo?.Behavior;
+			public int CurrentFrameIndex;
+			public System.Windows.Controls.Image ImageView;
+			public TimeSpan DeltaTime;
+			public Todo CurrentTodo;
+
+			#region Not restored to default on next frame
+			public bool TOGGLE_PauseAnimation = false;
+			#endregion
+
+			#region Restored to default on next frame
+			public bool BUTTON_ForceAnimationEnd = false;
+			#endregion
+
+			public void Clear()
+			{
+				Animation = null;
+				CurrentTodo = null;
+				CurrentFrameIndex = 0;
+				TOGGLE_PauseAnimation = false;
+				BUTTON_ForceAnimationEnd = false;
+			}
+
+			public AnimationInfo(System.Windows.Controls.Image image_view)
+			{
+				ImageView = image_view;
+			}
+		}
+
+		public class Todo
+		{
+			public IAnimationBehavior Behavior;
+			public KoroneDesktopPluginClass Plugin;
+			public string AnimationName;
+			public int Priority;
+
+			public Todo(IAnimationBehavior behavior, KoroneDesktopPluginClass plugin, string animationName)
+			{
+				Behavior = behavior;
+				Plugin = plugin;
+				AnimationName = animationName;
+			}
+		}
+
+		void StartThread()
+		{
+			m_loop_thread_token = new CancellationTokenSource();
+			m_loop_thread = new Thread(new ThreadStart(() =>
+			{
+				var sleep = m_config.FPS_sleep_ms;
+
+				var todo = GetTodo();
+				AnimationInfo info = new AnimationInfo(IMAGEVIEW_CHAR);
+
+				info.Clear();
+				long old_time = DateTime.UtcNow.Ticks;
+				long anim_frame_old_time = DateTime.UtcNow.Ticks;
+				long todo_find_time_old = DateTime.UtcNow.Ticks;
+				int next_behavior_delay = 0;
+
+				var NewTodo = new Action(() =>
+				{
+					todo = GetTodo();
+
+					if (info.Animation != null && info.Animation.AnimationName == ANIMATION_IDLE && todo.AnimationName == info.Animation.AnimationName)
+					{
+						return;
+					}
+
+					if ((info.CurrentTodo != null && todo.Priority > info.CurrentTodo.Priority) || info.CurrentTodo == null)
+					{
+						info.CurrentTodo = todo;
+						info.CurrentFrameIndex = 0;
+						info.Animation = m_animations[todo.AnimationName];
+					}
+				});
+
+				var RenderImage = new Action(() =>
+				{
+					Dispatcher.Invoke(() =>
+					{
+						IMAGEVIEW_CHAR.Source = info.Animation.Frames[info.CurrentFrameIndex].Image;
+						if (info.Behavior != null) info.Behavior.AnimtaionFrameUpdated(info, this);
+					});
+				});
+
+				NewTodo();
+
+				while (!m_loop_thread_token.IsCancellationRequested)
+				{
+					info.DeltaTime = TimeSpan.FromTicks(DateTime.UtcNow.Ticks - old_time);
+					old_time = DateTime.UtcNow.Ticks;
+
+					if(info.Behavior != null) info.Behavior.WindowFrameUpdated(info, this);
+					var req = WindowFrameUpdate?.Invoke();
+
+					//todo proc
+					//항상 할일을 찾아야함
+					//현재 진행중인 애니메이션 우선순위보다 높다면
+					//현재 행동을 포기하고
+					//높은 우선순위 할일을 함
+					{
+						if (next_behavior_delay <= 0)
+						{
+							next_behavior_delay = Random.Next(m_config.BehaviorRandomDelay_Min_MS, m_config.BehaviorRandomDelay_Max_MS);
+						}
+
+						if ((req!=null && req.ForceFindNewTodo) || (TimeSpan.FromTicks(DateTime.UtcNow.Ticks - todo_find_time_old).TotalMilliseconds > next_behavior_delay))
+						{
+							foreach (var p in m_plugins.Values)
+							{
+								p.TODO_EVENT();
+							}
+
+							NewTodo();
+							todo_find_time_old = DateTime.UtcNow.Ticks;
+						}
+					}
+
+					//animation proc
+					if (info.Animation != null)
+					{
+						if ((!info.TOGGLE_PauseAnimation && TimeSpan.FromTicks(DateTime.UtcNow.Ticks - anim_frame_old_time).TotalMilliseconds > info.Animation.Frames[info.CurrentFrameIndex].Delay) || info.BUTTON_ForceAnimationEnd)
+						{
+							anim_frame_old_time = DateTime.UtcNow.Ticks;
+
+							if (info.CurrentFrameIndex == 0)
+							{
+								if (info.Behavior != null) info.Behavior.Start(info, this);
+							}
+
+							RenderImage();
+
+							if (info.CurrentFrameIndex + 1 >= info.Animation.Frames.Length || info.BUTTON_ForceAnimationEnd)
+							{
+								if (info.BUTTON_ForceAnimationEnd)
+								{
+									//animation end
+									if (info.Behavior != null) info.Behavior.End(info, this);
+									info.Clear();
+									goto done;
+								}
+								info.CurrentFrameIndex = 0;
+							}
+							else
+							{
+								info.CurrentFrameIndex++;
+							}
+						}
+					}
+
+				done:
+					Thread.Sleep(sleep);
+				}
+			}));
+
+			Closing += MainWindow_Closing;
+			m_loop_thread.Start();
+		}
+
+		private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+		{
+			m_loop_thread_token.Cancel();
+			foreach (var p in m_plugins.Values)
+			{
+				p.OTSUKORON();
+			}
+			m_loop_thread.Join();
+		}
+
+		//<anim name> <plugin class>
+		Todo GetTodo()
+		{
+			if (m_priority_0.Count != 0)
+			{
+				var o = m_priority_0[0];
+				m_priority_0.RemoveAt(0);
+				return o;
+			}
+			else if (m_priority_1.Count != 0)
+			{
+				var o = m_priority_1[0];
+				m_priority_1.RemoveAt(0);
+				return o;
+			}
+			else if (m_priority_2.Count != 0)
+			{
+				var o = m_priority_2[0];
+				m_priority_2.RemoveAt(0);
+				return o;
+			}
+			else if (m_priority_3.Count != 0)
+			{
+				var o = m_priority_3[0];
+				m_priority_3.RemoveAt(0);
+				return o;
+			}
+			else
+			{
+				var idle = new Todo(null, m_plugins[PLUGIN_BASE_NAME], ANIMATION_IDLE);
+				idle.Priority = (int)EisenhowerMatrix.NOT_URGENT__NOT_IMPORTANT;
+				idle.Priority--;
+				return idle;
+			}
+		}
+
+		#region MemberVar
+
+		public readonly Random Random = new Random();
+		public int ScreenWidth => (int)System.Windows.SystemParameters.PrimaryScreenWidth;
+		public int ScreenHeight => (int)System.Windows.SystemParameters.PrimaryScreenHeight;
+		public System.Drawing.Point Position => new System.Drawing.Point((int)Left, (int)Top);
+		public event Func<Request> WindowFrameUpdate;
+
+		object m_lock = new object();
+
+		Config m_config;
+		Thread m_loop_thread;
+		CancellationTokenSource m_loop_thread_token;
+		List<Todo> m_priority_0 = new List<Todo>();
+		List<Todo> m_priority_1 = new List<Todo>();
+		List<Todo> m_priority_2 = new List<Todo>();
+		List<Todo> m_priority_3 = new List<Todo>();
+		Dictionary<string, KoroneAnimation> m_animations = new Dictionary<string, KoroneAnimation>();
+		Dictionary<string, KoroneDesktopPluginClass> m_plugins = new Dictionary<string, KoroneDesktopPluginClass>();
+
+		#endregion
+
+		#region Callable
+
+		public bool CALL_AddTodoList(EisenhowerMatrix priority, Todo todo)
+		{
+			int priority_int = (int)priority;
+			todo.Priority = priority_int;
+			if (priority_int == 0)
+			{
+				m_priority_0.Add(todo);
+			}
+			else if (priority_int == 1)
+			{
+				m_priority_1.Add(todo);
+			}
+			else if (priority_int == 2)
+			{
+				m_priority_2.Add(todo);
+			}
+			else if (priority_int == 3)
+			{
+				m_priority_3.Add(todo);
+			}
+			else
+			{
+				return false;
+			}
+
+			return true;
+		}
+
+		#endregion
+	}
 }

@@ -4,10 +4,20 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <UseWPF>true</UseWPF>
+    <BaseOutputPath>$(SolutionDir)bin</BaseOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="System.Drawing.Common" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EditorConfigFiles Remove="X:\PROJECTS\DesktopKorone\project\DesktopKorone\DesktopKorone\.editorconfig" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="X:\PROJECTS\DesktopKorone\project\DesktopKorone\DesktopKorone\.editorconfig" />
   </ItemGroup>
 
 </Project>
