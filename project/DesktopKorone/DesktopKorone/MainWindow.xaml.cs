@@ -232,12 +232,15 @@ namespace DesktopKorone
 		public class AnimationInfo
 		{
 			public KoroneAnimation Animation;
-			public KoroneDesktopPluginClass Plugin=>CurrentTodo.Plugin;
-			public IAnimationBehavior Behavior=>CurrentTodo?.Behavior;
+			public KoroneDesktopPluginClass Plugin => CurrentTodo.Plugin;
+			public IAnimationBehavior Behavior => CurrentTodo?.Behavior;
 			public int CurrentFrameIndex;
 			public System.Windows.Controls.Image ImageView;
 			public TimeSpan DeltaTime;
 			public Todo CurrentTodo;
+
+			[Obsolete("dont access")]
+			public int ID = 0;
 
 			#region Not restored to default on next frame
 			public bool TOGGLE_PauseAnimation = false;
@@ -293,20 +296,32 @@ namespace DesktopKorone
 				long todo_find_time_old = DateTime.UtcNow.Ticks;
 				int next_behavior_delay = 0;
 
+<<<<<<< Updated upstream
 				var NewTodo = new Action(() =>
+=======
+				var ApplyTodo = new Action<Todo>((todo) =>
+				{
+					info.CurrentTodo = todo;
+					info.CurrentFrameIndex = 0;
+					info.Animation = m_animations[todo.AnimationName];
+					info.ID++;
+
+					if (info.Behavior != null) info.CurrentTodo.Behavior.Prepare(info, this);
+				});
+
+				var NewTodo = new Action<bool>((bool get_idle) =>
+>>>>>>> Stashed changes
 				{
 					todo = GetTodo();
 
-					if (info.Animation != null && info.Animation.AnimationName == ANIMATION_IDLE && todo.AnimationName == info.Animation.AnimationName)
+					if (info.Animation != null && todo.AnimationName == info.Animation.AnimationName)
 					{
 						return;
 					}
 
 					if ((info.CurrentTodo != null && todo.Priority > info.CurrentTodo.Priority) || info.CurrentTodo == null)
 					{
-						info.CurrentTodo = todo;
-						info.CurrentFrameIndex = 0;
-						info.Animation = m_animations[todo.AnimationName];
+						ApplyTodo(todo);
 					}
 				});
 
@@ -326,7 +341,6 @@ namespace DesktopKorone
 					info.DeltaTime = TimeSpan.FromTicks(DateTime.UtcNow.Ticks - old_time);
 					old_time = DateTime.UtcNow.Ticks;
 
-					if(info.Behavior != null) info.Behavior.WindowFrameUpdated(info, this);
 					var req = WindowFrameUpdate?.Invoke();
 
 					//todo proc
@@ -340,7 +354,16 @@ namespace DesktopKorone
 							next_behavior_delay = Random.Next(m_config.BehaviorRandomDelay_Min_MS, m_config.BehaviorRandomDelay_Max_MS);
 						}
 
-						if ((req!=null && req.ForceFindNewTodo) || (TimeSpan.FromTicks(DateTime.UtcNow.Ticks - todo_find_time_old).TotalMilliseconds > next_behavior_delay))
+						bool is_find_todo = req != null && req.ForceFindNewTodo;
+						bool is_instant_anim = m_instant_animation != null;
+						bool is_time = TimeSpan.FromTicks(DateTime.UtcNow.Ticks - todo_find_time_old).TotalMilliseconds > next_behavior_delay;
+
+						if (is_instant_anim)
+						{
+							ApplyTodo(m_instant_animation);
+							m_instant_animation = null;
+						}
+						else if (is_find_todo || is_time)
 						{
 							foreach (var p in m_plugins.Values)
 							{
@@ -359,19 +382,20 @@ namespace DesktopKorone
 						{
 							anim_frame_old_time = DateTime.UtcNow.Ticks;
 
-							if (info.CurrentFrameIndex == 0)
-							{
-								if (info.Behavior != null) info.Behavior.Start(info, this);
-							}
-
 							RenderImage();
+
+							if(info.CurrentFrameIndex == 0)
+							{
+								if (info.Behavior != null) info.Behavior.FirstFrame(info, this);
+							}
 
 							if (info.CurrentFrameIndex + 1 >= info.Animation.Frames.Length || info.BUTTON_ForceAnimationEnd)
 							{
+								if (info.Behavior != null) info.Behavior.LastFrame(info, this);
 								if (info.BUTTON_ForceAnimationEnd)
 								{
 									//animation end
-									if (info.Behavior != null) info.Behavior.End(info, this);
+									if (info.Behavior != null) info.Behavior.AnimationEnd(info, this);
 									info.Clear();
 									goto done;
 								}
@@ -384,7 +408,9 @@ namespace DesktopKorone
 						}
 					}
 
-				done:
+					if (info.Behavior != null) info.Behavior.WindowFrameUpdated(info, this);
+
+					done:
 					Thread.Sleep(sleep);
 				}
 			}));
@@ -452,6 +478,7 @@ namespace DesktopKorone
 		Config m_config;
 		Thread m_loop_thread;
 		CancellationTokenSource m_loop_thread_token;
+		Todo m_instant_animation = null;
 		List<Todo> m_priority_0 = new List<Todo>();
 		List<Todo> m_priority_1 = new List<Todo>();
 		List<Todo> m_priority_2 = new List<Todo>();
@@ -463,7 +490,7 @@ namespace DesktopKorone
 
 		#region Callable
 
-		public bool CALL_AddTodoList(EisenhowerMatrix priority, Todo todo)
+		public bool AddTodo(EisenhowerMatrix priority, Todo todo)
 		{
 			int priority_int = (int)priority;
 			todo.Priority = priority_int;
@@ -489,6 +516,11 @@ namespace DesktopKorone
 			}
 
 			return true;
+		}
+
+		public void InstantTodo(Todo todo)
+		{
+			m_instant_animation = todo;
 		}
 
 		#endregion

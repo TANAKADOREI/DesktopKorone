@@ -42,10 +42,81 @@ namespace DesktopKorone.Ref
 
 	public interface IAnimationBehavior
 	{
-		void Start(MainWindow.AnimationInfo info, MainWindow window);
+		void Prepare(MainWindow.AnimationInfo info, MainWindow window);
+		void FirstFrame(MainWindow.AnimationInfo info, MainWindow window);
 		void WindowFrameUpdated(MainWindow.AnimationInfo info, MainWindow window);
 		void AnimtaionFrameUpdated(MainWindow.AnimationInfo info, MainWindow window);
-		void End(MainWindow.AnimationInfo info, MainWindow window);
+		void LastFrame(MainWindow.AnimationInfo info, MainWindow window);
+		void AnimationEnd(MainWindow.AnimationInfo info, MainWindow window);
+	}
+
+	public abstract class AnimationBehaviorClass : IAnimationBehavior
+	{
+		MainWindow m_window;
+		MainWindow.AnimationInfo m_info;
+		int ID;
+
+		MainWindow Window => m_info.ID == ID ? m_window : null;
+		MainWindow.AnimationInfo Info => m_info.ID == ID ? m_info : null;
+
+		public void AnimationEnd(MainWindow.AnimationInfo info, MainWindow window)
+		{
+			if (ID == info.ID) _AnimationEnd(Info, Window);
+		}
+
+		public void AnimtaionFrameUpdated(MainWindow.AnimationInfo info, MainWindow window)
+		{
+			if (ID == info.ID) _AnimtaionFrameUpdated(Info, Window);
+		}
+
+		public void FirstFrame(MainWindow.AnimationInfo info, MainWindow window)
+		{
+			if (ID == info.ID) _FirstFrame(Info, Window);
+		}
+
+		public void LastFrame(MainWindow.AnimationInfo info, MainWindow window)
+		{
+			if (ID == info.ID) _LastFrame(Info, Window);
+		}
+
+		public void Prepare(MainWindow.AnimationInfo info, MainWindow window)
+		{
+			m_window = window;
+			m_info = info;
+			ID = info.ID;
+
+			if (ID == info.ID) _Prepare(Info, Window);
+		}
+
+		public void WindowFrameUpdated(MainWindow.AnimationInfo info, MainWindow window)
+		{
+			if (ID == info.ID) _WindowFrameUpdated(Info, Window);
+		}
+
+		protected virtual void _Prepare(MainWindow.AnimationInfo info, MainWindow window)
+		{
+
+		}
+
+		protected virtual void _AnimationEnd(MainWindow.AnimationInfo info, MainWindow window)
+		{
+		}
+
+		protected virtual void _AnimtaionFrameUpdated(MainWindow.AnimationInfo info, MainWindow window)
+		{
+		}
+
+		protected virtual void _FirstFrame(MainWindow.AnimationInfo info, MainWindow window)
+		{
+		}
+
+		protected virtual void _LastFrame(MainWindow.AnimationInfo info, MainWindow window)
+		{
+		}
+
+		protected virtual void _WindowFrameUpdated(MainWindow.AnimationInfo info, MainWindow window)
+		{
+		}
 	}
 
 	public enum AnimationState
