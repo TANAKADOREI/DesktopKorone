@@ -296,9 +296,7 @@ namespace DesktopKorone
 				long todo_find_time_old = DateTime.UtcNow.Ticks;
 				int next_behavior_delay = 0;
 
-<<<<<<< Updated upstream
-				var NewTodo = new Action(() =>
-=======
+				
 				var ApplyTodo = new Action<Todo>((todo) =>
 				{
 					info.CurrentTodo = todo;
@@ -310,7 +308,6 @@ namespace DesktopKorone
 				});
 
 				var NewTodo = new Action<bool>((bool get_idle) =>
->>>>>>> Stashed changes
 				{
 					todo = GetTodo();
 
@@ -334,7 +331,7 @@ namespace DesktopKorone
 					});
 				});
 
-				NewTodo();
+				NewTodo(true);
 
 				while (!m_loop_thread_token.IsCancellationRequested)
 				{
@@ -370,7 +367,7 @@ namespace DesktopKorone
 								p.TODO_EVENT();
 							}
 
-							NewTodo();
+							NewTodo(false);
 							todo_find_time_old = DateTime.UtcNow.Ticks;
 						}
 					}
@@ -397,6 +394,7 @@ namespace DesktopKorone
 									//animation end
 									if (info.Behavior != null) info.Behavior.AnimationEnd(info, this);
 									info.Clear();
+									NewTodo(true);
 									goto done;
 								}
 								info.CurrentFrameIndex = 0;

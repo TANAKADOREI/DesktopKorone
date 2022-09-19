@@ -32,8 +32,6 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
         return new Point(Lerp(a.X, b.X, t), Lerp(a.Y, b.Y, t));
     }
 
-<<<<<<< Updated upstream
-=======
     static float Abs(float f)
     {
         return (f < 0) ? -f : f;
@@ -43,8 +41,6 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
     {
         return Abs((float)Math.Sqrt(Math.Pow(b.X - a.X, 2) + Math.Pow(b.Y - a.Y, 2)));
     }
-
->>>>>>> Stashed changes
     #endregion
 
     MainWindow m_window;
@@ -105,7 +101,7 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
     class Anim_FreeWalk : AnimationBehaviorClass
     {
         ScaleTransform flipTrans;
-        const float SPEED = 0.1f;
+        const float SPEED = 30;
         Point m_goal_point;
         Point m_start_point;
         float m_time;
@@ -130,28 +126,11 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
         {
             window.Dispatcher.Invoke(() =>
             {
-<<<<<<< Updated upstream
-                if(flipTrans == null)
-                {
-                    m_start_point = new Point((int)window.Left, (int)window.Top);
-                    m_goal_point = new Point(window.Random.Next(0, window.ScreenWidth - (int)window.Width),
-                        window.Random.Next(0, window.ScreenHeight - (int)window.Height));
-                    m_time = 0;
-
-                    flipTrans = new ScaleTransform();
-                    
-                    flipTrans.ScaleX = (m_goal_point.X - window.Position.X > 0) ? -1 : 1;
-                    info.ImageView.RenderTransform = flipTrans;
-                }
-
-                m_time += SPEED * (float)info.DeltaTime.TotalSeconds;
-=======
                 var distance = Distance(m_start_point, m_goal_point);
                 var total_time = distance / SPEED;
                 var speed = (float)info.DeltaTime.TotalSeconds / total_time;
 
                 m_time += speed;
->>>>>>> Stashed changes
 
                 if (m_time > 1f)
                 {
