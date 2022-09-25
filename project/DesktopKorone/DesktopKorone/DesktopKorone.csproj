@@ -6,6 +6,7 @@
     <UseWPF>true</UseWPF>
     <BaseOutputPath>$(SolutionDir)bin</BaseOutputPath>
 	<UseWindowsForms>true</UseWindowsForms>
+	<ApplicationIcon>Res\Icon\Icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +16,10 @@
 
   <ItemGroup>
     <EditorConfigFiles Remove="X:\PROJECTS\DesktopKorone\project\DesktopKorone\DesktopKorone\.editorconfig" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Res\Icon\Icon.ico" />
   </ItemGroup>
 
   <ItemGroup>

@@ -19,6 +19,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
+using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -83,10 +84,10 @@ namespace DesktopKorone
 			Startup();
 		}
 
-		public static void Exit(string msg)
+		private void Exit(string msg)
 		{
-			MessageBox.Show(msg);
-			Environment.Exit(0);
+			System.Windows.MessageBox.Show(msg);
+			OTSUKORON();
 		}
 
 		public static BitmapSource ImageToBitmapSource(Image image)
@@ -103,7 +104,7 @@ namespace DesktopKorone
 			}
 		}
 
-		public static Point PixelPosToUnit(int x,int y,Visual visual)
+		public static Point PixelPosToUnit(int x, int y, Visual visual)
 		{
 			var transform = PresentationSource.FromVisual(visual).CompositionTarget.TransformFromDevice;
 			var pos = transform.Transform(new Point(x, y));
@@ -439,17 +440,59 @@ namespace DesktopKorone
 			}));
 
 			Closing += MainWindow_Closing;
+			m_loop_thread.Name = "Looper";
 			m_loop_thread.Start();
+
+
+			//tray
+			{
+				var menu = new ContextMenuStrip();
+				var noti = new NotifyIcon()
+				{
+					Icon = System.Drawing.Icon.ExtractAssociatedIcon(System.Reflection.Assembly.GetEntryAssembly().ManifestModule.Name),
+					Visible = true,
+					Text = "ぉぁょ～",
+					ContextMenuStrip = menu
+				};
+
+				menu.Items.Add("おつころ～ん", null, OTSUKORON);
+			}
+		}
+
+		//program close
+		public void OTSUKORON()
+		{
+			OTSUKORON(this, null);
+		}
+
+		bool m_thread_closing = false;
+
+		private void OTSUKORON(object sender, EventArgs e)
+		{
+			m_loop_thread_token.Cancel();
+
+			Task.Run(() =>
+			{
+				m_loop_thread.Join();
+
+				lock (m_lock)
+				{
+					foreach (var p in m_plugins.Values)
+					{
+						p.OTSUKORON();
+					}
+				}
+
+				Dispatcher.Invoke(() =>
+				{
+					Close();
+				});
+			});
 		}
 
 		private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
 		{
-			m_loop_thread_token.Cancel();
-			foreach (var p in m_plugins.Values)
-			{
-				p.OTSUKORON();
-			}
-			m_loop_thread.Join();
+			OTSUKORON();
 		}
 
 		//<anim name> <plugin class>
@@ -528,7 +571,7 @@ namespace DesktopKorone
 			get
 			{
 				var pos = System.Windows.Forms.Control.MousePosition;
-				return PixelPosToUnit(pos.X,pos.Y,this);
+				return PixelPosToUnit(pos.X, pos.Y, this);
 			}
 		}
 		object m_lock = new object();
