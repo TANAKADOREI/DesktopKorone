@@ -326,7 +326,7 @@ namespace DesktopKorone
 				long anim_frame_old_time = DateTime.UtcNow.Ticks;
 				long todo_find_time_old = DateTime.UtcNow.Ticks;
 				int next_behavior_delay = 0;
-
+				bool req_frame_update = false;
 
 				var ApplyTodo = new Action<Todo>((todo) =>
 				{
@@ -385,6 +385,7 @@ namespace DesktopKorone
 						{
 							ApplyTodo(m_instant_animation);
 							m_instant_animation = null;
+							req_frame_update = true;
 						}
 						else if (is_find_todo || is_time)
 						{
@@ -401,8 +402,14 @@ namespace DesktopKorone
 					//animation proc
 					if (info.Animation != null)
 					{
-						if ((!info.TOGGLE_PauseAnimation && TimeSpan.FromTicks(DateTime.UtcNow.Ticks - anim_frame_old_time).TotalMilliseconds > info.Animation.Frames[info.CurrentFrameIndex].Delay) || info.BUTTON_ForceAnimationEnd)
+						if ((!info.TOGGLE_PauseAnimation && TimeSpan.FromTicks(DateTime.UtcNow.Ticks - anim_frame_old_time).TotalMilliseconds > info.Animation.Frames[info.CurrentFrameIndex].Delay)
+						|| info.BUTTON_ForceAnimationEnd || req_frame_update)
 						{
+							if (req_frame_update)
+							{
+								req_frame_update = false;
+							}
+
 							anim_frame_old_time = DateTime.UtcNow.Ticks;
 
 							RenderImage();
@@ -421,6 +428,7 @@ namespace DesktopKorone
 									if (info.Behavior != null) info.Behavior.AnimationEnd(info, this);
 									info.Clear();
 									NewTodo(true);
+									req_frame_update = true;
 									goto done;
 								}
 								info.CurrentFrameIndex = 0;
