@@ -11,6 +11,14 @@ using System.Windows.Media.Imaging;
 
 namespace DesktopKorone.Ref
 {
+	public static class EXT
+	{
+		public static double NextDouble(this Random rand, double minimum, double maximum)
+		{
+			return rand.NextDouble() * (maximum - minimum) + minimum;
+		}
+	}
+
 	public class KoroneKibun
 	{
 		public const string NORMAL = nameof(NORMAL);

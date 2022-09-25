@@ -9,8 +9,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using DesktopKorone;
 using DesktopKorone.Ref;
-
-using Point = System.Drawing.Point;
+using Point = System.Windows.Point;
 
 [KoroneDesktopPluginAttr("KoroneDesktopBasePlugin")]
 public class KoroneDesktopPlugin : KoroneDesktopPluginClass
@@ -22,9 +21,9 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
         return 0 <= o ? 1 >= o ? o : 1 : 0;
     }
 
-    static int Lerp(int a, int b, float t)
+    static double Lerp(double a, double b, double t)
     {
-        return (int)((float)a + ((float)b - (float)a) * t);
+        return (a + (b - a) * t);
     }
 
     static Point Lerp(Point a, Point b, float t)
@@ -48,14 +47,13 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
     public override void OAYO(MainWindow window)
     {
         m_window = window;
-        //m_window.MouseDown += M_window_MouseDown;
+        m_window.PreviewMouseDown += M_window_MouseDown;
     }
 
     private void M_window_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        if(e.ChangedButton == MouseButton.Left)
+        if (e.ChangedButton == MouseButton.Left)
         {
-            m_window.DragMove();
             m_window.InstantTodo(new MainWindow.Todo(new Anim_Catch(), this, "@CATCH"));
         }
         else if (e.ChangedButton == MouseButton.Right)
@@ -81,12 +79,21 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
 
     class Anim_Catch : AnimationBehaviorClass
     {
-        protected override void _AnimtaionFrameUpdated(MainWindow.AnimationInfo info, MainWindow window)
+        protected override void _WindowFrameUpdated(MainWindow.AnimationInfo info, MainWindow window)
         {
-            if (Mouse.LeftButton != MouseButtonState.Pressed)
+            window.Dispatcher.Invoke(() =>
             {
-                info.BUTTON_ForceAnimationEnd = false;
-            }
+                if (Mouse.LeftButton == MouseButtonState.Released)
+                {
+                    info.BUTTON_ForceAnimationEnd = true;
+                    return;
+                }
+
+                var pos = window.MousePos;
+                pos.X -= window.WindowSize.X / 2;
+                pos.Y -= window.WindowSize.Y / 2;
+                window.WindowPosition = pos;
+            });
         }
     }
 
@@ -110,14 +117,14 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
         {
             window.Dispatcher.Invoke(() =>
             {
-                m_start_point = new Point((int)window.Left, (int)window.Top);
-                m_goal_point = new Point(window.Random.Next(0, window.ScreenWidth - (int)window.Width),
-                    window.Random.Next(0, window.ScreenHeight - (int)window.Height));
+                m_start_point = window.WindowPosition;
+                m_goal_point = new Point(window.Random.NextDouble(0, window.ScreenSize.X - window.WindowSize.X),
+                    window.Random.NextDouble(0, window.ScreenSize.Y - window.WindowSize.Y));
                 m_time = 0;
 
                 flipTrans = new ScaleTransform();
 
-                flipTrans.ScaleX = (m_goal_point.X - window.Position.X > 0) ? -1 : 1;
+                flipTrans.ScaleX = (m_goal_point.X - window.WindowPosition.X > 0) ? -1 : 1;
                 info.ImageView.RenderTransform = flipTrans;
             });
         }
@@ -132,7 +139,7 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
 
                 m_time += speed;
 
-                if (m_time > 1f)
+                if (m_time > 1.0)
                 {
                     info.BUTTON_ForceAnimationEnd = true;
                     return;
@@ -140,8 +147,7 @@ public class KoroneDesktopPlugin : KoroneDesktopPluginClass
 
                 var pos = Lerp(m_start_point, m_goal_point, m_time);
 
-                window.Left = pos.X;
-                window.Top = pos.Y;
+                window.WindowPosition = pos;
             });
         }
     }

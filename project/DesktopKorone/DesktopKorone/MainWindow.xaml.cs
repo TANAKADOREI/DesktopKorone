@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
@@ -9,6 +10,7 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Security.Cryptography.Xml;
 using System.Text;
 using System.Threading;
@@ -27,7 +29,7 @@ using System.Windows.Threading;
 
 using Image = System.Drawing.Image;
 using Path = System.IO.Path;
-using Rectangle = System.Drawing.Rectangle;
+using Point = System.Windows.Point;
 
 namespace DesktopKorone
 {
@@ -36,6 +38,19 @@ namespace DesktopKorone
 		[DllImport("gdi32.dll", EntryPoint = nameof(DeleteObject))]
 		[return: MarshalAs(UnmanagedType.Bool)]
 		public static extern bool DeleteObject([In] IntPtr hObject);
+		[DllImport("User32")]
+		public static extern int GetCursorPos(out __Point pt);
+
+		public struct __Point
+		{
+			public int x;
+			public int y;
+			public __Point(int _x, int _y)
+			{
+				x = _x;
+				y = _y;
+			}
+		}
 
 		public const string DIR_PLUGINS = "PLUGINS";
 		public const string DIR_RESOURCES = "RESOURCES";
@@ -51,6 +66,7 @@ namespace DesktopKorone
 			public int BehaviorRandomDelay_Min_MS = 1000;
 			public int BehaviorRandomDelay_Max_MS = 3000;
 			public int FPS = 60;
+			public int WindowSize = 128;
 
 			[JsonIgnore]
 			public int FPS_sleep_ms => 1000 / FPS;
@@ -59,6 +75,11 @@ namespace DesktopKorone
 		public MainWindow()
 		{
 			InitializeComponent();
+			Loaded += MainWindow_Loaded;
+		}
+
+		private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+		{
 			Startup();
 		}
 
@@ -80,6 +101,13 @@ namespace DesktopKorone
 			{
 				DeleteObject(handle);
 			}
+		}
+
+		public static Point PixelPosToUnit(int x,int y,Visual visual)
+		{
+			var transform = PresentationSource.FromVisual(visual).CompositionTarget.TransformFromDevice;
+			var pos = transform.Transform(new Point(x, y));
+			return pos;
 		}
 
 		void CheckBaseDirs(string name)
@@ -109,6 +137,8 @@ namespace DesktopKorone
 				m_config = new Config();
 				File.WriteAllText(FILE_CONFIG, JsonConvert.SerializeObject(m_config, Formatting.Indented));
 			}
+
+			WindowSize = PixelPosToUnit(m_config.WindowSize, m_config.WindowSize, this);
 		}
 
 		void LoadPlugins()
@@ -296,7 +326,7 @@ namespace DesktopKorone
 				long todo_find_time_old = DateTime.UtcNow.Ticks;
 				int next_behavior_delay = 0;
 
-				
+
 				var ApplyTodo = new Action<Todo>((todo) =>
 				{
 					info.CurrentTodo = todo;
@@ -340,11 +370,6 @@ namespace DesktopKorone
 
 					var req = WindowFrameUpdate?.Invoke();
 
-					//todo proc
-					//항상 할일을 찾아야함
-					//현재 진행중인 애니메이션 우선순위보다 높다면
-					//현재 행동을 포기하고
-					//높은 우선순위 할일을 함
 					{
 						if (next_behavior_delay <= 0)
 						{
@@ -381,7 +406,7 @@ namespace DesktopKorone
 
 							RenderImage();
 
-							if(info.CurrentFrameIndex == 0)
+							if (info.CurrentFrameIndex == 0)
 							{
 								if (info.Behavior != null) info.Behavior.FirstFrame(info, this);
 							}
@@ -466,11 +491,46 @@ namespace DesktopKorone
 		#region MemberVar
 
 		public readonly Random Random = new Random();
-		public int ScreenWidth => (int)System.Windows.SystemParameters.PrimaryScreenWidth;
-		public int ScreenHeight => (int)System.Windows.SystemParameters.PrimaryScreenHeight;
-		public System.Drawing.Point Position => new System.Drawing.Point((int)Left, (int)Top);
+		public Point ScreenSize
+		{
+			get
+			{
+				return new Point((int)SystemParameters.PrimaryScreenWidth, (int)SystemParameters.PrimaryScreenHeight);
+			}
+		}
+		public Point WindowPosition
+		{
+			get
+			{
+				return new Point(Left, Top);
+			}
+			set
+			{
+				Left = value.X;
+				Top = value.Y;
+			}
+		}
+		public Point WindowSize
+		{
+			get
+			{
+				return new System.Windows.Point(Width, Height);
+			}
+			set
+			{
+				Width = value.X;
+				Height = value.Y;
+			}
+		}
 		public event Func<Request> WindowFrameUpdate;
-
+		public Point MousePos
+		{
+			get
+			{
+				var pos = System.Windows.Forms.Control.MousePosition;
+				return PixelPosToUnit(pos.X,pos.Y,this);
+			}
+		}
 		object m_lock = new object();
 
 		Config m_config;
