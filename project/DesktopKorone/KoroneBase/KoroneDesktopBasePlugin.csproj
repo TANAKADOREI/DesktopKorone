@@ -9,4 +9,12 @@
     <ProjectReference Include="..\DesktopKorone\DesktopKorone.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="PLUGINS\" />
+  </ItemGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="xcopy &quot;$(ProjectDir)PLUGINS\*.*&quot; &quot;$(TargetDir)\PLUGINS&quot; /Y /I /E&#xD;&#xA;xcopy &quot;$(ProjectDir)RESOURCES\*.*&quot; &quot;$(TargetDir)\RESOURCES&quot; /Y /I /E&#xD;&#xA;xcopy &quot;$(ProjectDir)RESOURCES_ANIMATION_CONTROLLER\*.*&quot; &quot;$(TargetDir)\RESOURCES_ANIMATION_CONTROLLER&quot; /Y /I /E" />
+  </Target>
+
 </Project>

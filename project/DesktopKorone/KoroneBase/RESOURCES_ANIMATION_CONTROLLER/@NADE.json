@@ -1,0 +1,16 @@
+{
+  "VERSION": 1,
+  "AnimationName": "@NADE",
+  "Frames": [
+	{
+		"ImagePath": "BASE/NADE/1.png",
+		"Delay": 500
+	},
+	{
+		"ImagePath": "BASE/NADE/2.png",
+		"Delay": 500
+	}
+  ],
+  "Notice_Loop": "Loop <= 0 == 'loop', Loop > 0 == 'repeat'",
+  "Loop": 0
+}

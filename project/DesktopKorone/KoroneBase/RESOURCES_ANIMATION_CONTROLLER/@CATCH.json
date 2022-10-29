@@ -1,0 +1,16 @@
+{
+  "VERSION": 1,
+  "AnimationName": "@CATCH",
+  "Frames": [
+	{
+		"ImagePath": "BASE/CATCH/1.png",
+		"Delay": 500
+	},
+	{
+		"ImagePath": "BASE/CATCH/2.png",
+		"Delay": 500
+	}
+  ],
+  "Notice_Loop": "Loop <= 0 == 'loop', Loop > 0 == 'repeat'",
+  "Loop": 0
+}

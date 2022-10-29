@@ -1,0 +1,16 @@
+{
+  "VERSION": 1,
+  "AnimationName": "@IDLE",
+  "Frames": [
+	{
+		"ImagePath": "BASE/IDLE/1.png",
+		"Delay": 500
+	},
+	{
+		"ImagePath": "BASE/IDLE/2.png",
+		"Delay": 500
+	}
+  ],
+  "Notice_Loop": "Loop <= 0 == 'loop', Loop > 0 == 'repeat'",
+  "Loop": 0
+}

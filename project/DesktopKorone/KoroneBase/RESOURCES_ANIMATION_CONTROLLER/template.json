@@ -1,0 +1,19 @@
+{
+  "VERSION": 1,
+  "AnimationName": "MyAnimationName",
+  "Frames": [
+    {
+      "Notice": "",
+      "Notice_ImagePath": "Image path (png, gif)",
+      "ImagePath": "",
+      "Notice_Delay": "the time the image will be displayed",
+      "Delay": 563,
+      "Notice_EventCode": "Tells the plugin this code when the image is displayed",
+      "EventCode": "event code",
+      "Notice_LoopCount": "How many times to repeat the motion of the frame",
+      "LoopCount": 123
+    }
+  ],
+  "Notice_Loop": "Loop <= 0 == 'loop', Loop > 0 == 'repeat'",
+  "Loop": 0
+}
